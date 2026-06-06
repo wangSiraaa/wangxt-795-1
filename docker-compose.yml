@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: research-expense-backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    volumes:
+      - backend-data:/app/data
+      - backend-uploads:/app/uploads
+    networks:
+      - app-network
+
+  frontend:
+    build: ./frontend
+    container_name: research-expense-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  test-runner:
+    build: ./backend
+    container_name: research-expense-test
+    depends_on:
+      - backend
+    volumes:
+      - ./scripts:/app/scripts
+    entrypoint: ["sh", "-c", "sleep 10 && node /app/scripts/acceptance-test.js"]
+    networks:
+      - app-network
+    profiles:
+      - test
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  backend-data:
+  backend-uploads:
