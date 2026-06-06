@@ -84,10 +84,14 @@ docker-compose up -d --build
 
 ```bash
 # 本地运行
-node scripts/acceptance-test.js
+BASE_URL=http://localhost:4000 node scripts/acceptance-test.js
 
 # Docker 中运行
-docker-compose run --rm test-runner
+COMPOSE_PROJECT_NAME=wangxt795 docker-compose run --rm test-runner
+
+# 使用隔离端口运行完整容器验收
+COMPOSE_PROJECT_NAME=wangxt795 BACKEND_HOST_PORT=17950 FRONTEND_HOST_PORT=17951 docker-compose up -d --build
+COMPOSE_PROJECT_NAME=wangxt795 docker-compose run --rm test-runner
 ```
 
 ### 测试覆盖场景
