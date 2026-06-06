@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Reimbursement = require('../models/Reimbursement');
 const BudgetSubject = require('../models/BudgetSubject');
+const BudgetLock = require('../models/BudgetLock');
 const BusinessRules = require('../rules/businessRules');
 const { ReimbursementItem, Invoice, PreReview, Confirmation, StatusHistory } = require('../models/OtherModels');
 
@@ -25,6 +26,7 @@ router.get('/:id', async (req, res) => {
     const preReviews = await PreReview.findByReimbursementId(req.params.id);
     const confirmations = await Confirmation.findByReimbursementId(req.params.id);
     const history = await StatusHistory.findByReimbursementId(req.params.id);
+    const budgetLocks = await BudgetLock.findByReimbursementId(req.params.id);
     
     res.json({
       success: true,
@@ -34,7 +36,8 @@ router.get('/:id', async (req, res) => {
         invoices,
         preReviews,
         confirmations,
-        history
+        history,
+        budget_locks: budgetLocks
       }
     });
   } catch (err) {
@@ -126,14 +129,29 @@ router.post('/:id/pre-review', async (req, res) => {
       opinion
     });
     
-    const nextStatus = result === 'pass' ? 'pre_reviewed' : 'rejected';
-    await Reimbursement.updateStatus(req.params.id, nextStatus, reviewer, opinion || '预审完成');
+    const reimbursement = await Reimbursement.findById(req.params.id);
     
     if (result === 'pass') {
       const items = await ReimbursementItem.findByReimbursementId(req.params.id);
+      const invoices = await Invoice.findByReimbursementId(req.params.id);
+      
       for (const item of items) {
-        await BudgetSubject.updateUsedAmount(item.budget_subject_id, item.amount);
+        const invoiceNo = invoices.length > 0 ? invoices.map(i => i.invoice_no).join(', ') : null;
+        
+        await BudgetLock.create({
+          reimbursement_id: req.params.id,
+          budget_subject_id: item.budget_subject_id,
+          invoice_no: invoiceNo,
+          applicant: reimbursement.applicant,
+          lock_amount: item.amount
+        });
+        
+        await BudgetSubject.updateLockedAmount(item.budget_subject_id, item.amount);
       }
+      
+      await Reimbursement.updateStatus(req.params.id, 'pending_confirmation', reviewer, opinion || '预审通过，待领导确认');
+    } else {
+      await Reimbursement.updateStatus(req.params.id, 'rejected', reviewer, opinion || '预审不通过');
     }
     
     const updated = await Reimbursement.findById(req.params.id);
@@ -161,10 +179,27 @@ router.post('/:id/confirm', async (req, res) => {
       const allApproved = confirmations.every(c => c.result === 'approved');
       
       if (allApproved) {
-        await Reimbursement.updateStatus(req.params.id, 'pre_reviewing', operator || 'system', '超预算已确认，进入预审');
+        const items = await ReimbursementItem.findByReimbursementId(req.params.id);
+        
+        for (const item of items) {
+          await BudgetSubject.updateUsedAmount(item.budget_subject_id, item.amount);
+          await BudgetSubject.updateLockedAmount(item.budget_subject_id, -item.amount);
+        }
+        
+        await BudgetLock.releaseByReimbursementId(req.params.id, '领导确认通过，锁定释放');
+        
+        await Reimbursement.updateStatus(req.params.id, 'pre_reviewed', operator || 'system', '领导确认通过');
       }
     } else {
-      await Reimbursement.updateStatus(req.params.id, 'rejected', operator || 'system', '超预算未通过确认');
+      const items = await ReimbursementItem.findByReimbursementId(req.params.id);
+      
+      for (const item of items) {
+        await BudgetSubject.updateLockedAmount(item.budget_subject_id, -item.amount);
+      }
+      
+      await BudgetLock.releaseByReimbursementId(req.params.id, '领导确认不通过，锁定释放');
+      
+      await Reimbursement.updateStatus(req.params.id, 'rejected', operator || 'system', '领导确认不通过');
     }
     
     const updated = await Reimbursement.findById(req.params.id);

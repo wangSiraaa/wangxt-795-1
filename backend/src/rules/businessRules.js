@@ -41,6 +41,7 @@ class BusinessRules {
 
   static async checkBudgetExceed(reimbursementId) {
     const { ReimbursementItem } = require('../models/OtherModels');
+    const BudgetLock = require('../models/BudgetLock');
     const items = await ReimbursementItem.findByReimbursementId(reimbursementId);
     
     const overBudgetItems = [];
@@ -48,16 +49,18 @@ class BusinessRules {
     for (const item of items) {
       const subject = await BudgetSubject.findById(item.budget_subject_id);
       if (subject) {
-        const remaining = subject.budget_amount - subject.used_amount;
-        if (item.amount > remaining) {
+        const totalLocked = await BudgetLock.getTotalLockedBySubjectId(item.budget_subject_id);
+        const available = subject.budget_amount - subject.used_amount - totalLocked;
+        if (item.amount > available) {
           overBudgetItems.push({
             subject_id: subject.id,
             subject_name: subject.name,
             budget_amount: subject.budget_amount,
             used_amount: subject.used_amount,
-            remaining: remaining,
+            locked_amount: totalLocked,
+            remaining: available,
             requested: item.amount,
-            over_amount: item.amount - remaining
+            over_amount: item.amount - available
           });
         }
       }

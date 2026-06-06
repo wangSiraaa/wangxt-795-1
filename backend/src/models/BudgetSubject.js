@@ -48,6 +48,34 @@ class BudgetSubject {
       );
     });
   }
+
+  static updateLockedAmount(id, amount) {
+    return new Promise((resolve, reject) => {
+      db.run(
+        `UPDATE budget_subjects SET locked_amount = locked_amount + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [amount, id],
+        function (err) {
+          if (err) reject(err);
+          else resolve({ changes: this.changes });
+        }
+      );
+    });
+  }
+
+  static getAvailableBudget(id) {
+    return new Promise((resolve, reject) => {
+      db.get(
+        `SELECT budget_amount, used_amount, locked_amount, 
+                (budget_amount - used_amount - locked_amount) as available 
+         FROM budget_subjects WHERE id = ?`,
+        [id],
+        (err, row) => {
+          if (err) reject(err);
+          else resolve(row ? row.available : 0);
+        }
+      );
+    });
+  }
 }
 
 module.exports = BudgetSubject;

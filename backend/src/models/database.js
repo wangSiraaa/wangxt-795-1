@@ -39,6 +39,7 @@ db.serialize(() => {
     name TEXT NOT NULL,
     budget_amount REAL NOT NULL DEFAULT 0,
     used_amount REAL NOT NULL DEFAULT 0,
+    locked_amount REAL NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (project_id) REFERENCES projects(id)
@@ -118,6 +119,22 @@ db.serialize(() => {
     remark TEXT,
     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (reimbursement_id) REFERENCES reimbursements(id)
+  )`);
+
+  db.run(`CREATE TABLE IF NOT EXISTS budget_locks (
+    id TEXT PRIMARY KEY,
+    reimbursement_id TEXT NOT NULL,
+    budget_subject_id TEXT NOT NULL,
+    invoice_no TEXT,
+    applicant TEXT NOT NULL,
+    lock_amount REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'locked',
+    release_reason TEXT,
+    released_at TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (reimbursement_id) REFERENCES reimbursements(id),
+    FOREIGN KEY (budget_subject_id) REFERENCES budget_subjects(id)
   )`);
 
   console.log('数据库表创建完成');
